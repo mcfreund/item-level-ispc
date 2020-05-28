@@ -161,6 +161,19 @@ d.rt %>%
   facet_grid(vars(experiment), scales = "free")
 
 
+
+d.rt %>%
+  
+  filter(experiment == "E1", trial.exp == 1)
+  ggplot(aes(trial.exp, rt, color = tt, fill = tt)) +
+  geom_smooth() +
+  
+  scale_fill_brewer(type = "qual", palette = 3) +
+  scale_x_continuous(breaks = seq(0, 144 * 6, 144)) +
+  
+  facet_grid(vars(experiment), scales = "free")
+
+
 ## prewhitening ----
 
 d.rt$block <- as.factor(d.rt$block)
@@ -285,7 +298,7 @@ bics.ps3$w  <- icw(bics.ps3$BIC)
 
 plot(bics.ps3$df, bics.ps3$w)
 
-
+qq
 
 # fit.ps6.empty <- lmer(
 #   
