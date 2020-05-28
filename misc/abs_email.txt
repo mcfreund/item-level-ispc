@@ -1,0 +1,16 @@
+
+
+Here are 5 out of 7 experiments. These are all experiments where we found transfer to unbiased items (category-specific PC effect).  Exp 2 is different in that it has double the trials than the other experiments (864 vs 432 per participant).  This is because some transfer items were "oppositely biased" and some were "consistently-extremely biased".  Meaning if a category was MC, an opp biased transfer item would be MI, but a consistently biased MC would also be MC (just more extreme; e.g., item is 83% cong whereas the category is 66% congruent).  Let me know if that doesn't make sense.  
+
+Column labels: 
+cb = counterbalance (mostly just ignore this, tells you the experiment and counterbalance for that exp)
+id = subject id 
+ispc = item specific proportion congruence (which is actually at the category level, not exemplar level)
+acc = accuracy. 1 = correct, 0 = incorrect
+keypressed = specific key coded; USEFUL ONLY FOR REMOVING SCRATCH TRIALS (when the key pressed is "l"). Scratch trials are those where the participant made a cough or said "um--dog" or something like that.
+experimenter.rt = how fast did the experimenter take to code the response (mostly useless to you probably)
+rt = participant response time for that tria
+stim = particular stim
+tt = trial type; coded as 1 for congruent and 2 for incongruent for odd reasons.  Obviously changed this for analysis.
+
+**Trial number is not included in the default csv's but it is easy to add in R.  All experiments EXCEPT Experiment 2 had 432 trials per subject and I'm pretty sure no trials were lost from these files.  Exp 2 had 864 trials per subject.

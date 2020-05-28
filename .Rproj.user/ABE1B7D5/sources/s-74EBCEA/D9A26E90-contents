@@ -1,0 +1,385 @@
+## about ----
+
+# From abs:
+# 
+# Column labels: 
+# cb = counterbalance (mostly just ignore this, tells you the experiment and counterbalance for that exp)
+# id = subject id 
+# ispc = item specific proportion congruence (which is actually at the category level, not exemplar level)
+# acc = accuracy. 1 = correct, 0 = incorrect
+# keypressed = specific key coded; USEFUL ONLY FOR REMOVING SCRATCH TRIALS (when the key pressed is "l"). 
+# Scratch trials are those where the participant made a cough or said "um--dog" or something like that.
+# experimenter.rt = how fast did the experimenter take to code the response (mostly useless to you probably)
+# rt = participant response time for that tria
+# stim = particular stim
+# tt = trial type; coded as 1 for congruent and 2 for incongruent for odd reasons.  Obviously changed this for analysis.
+# 
+# **Trial number is not included in the default csv's but it is easy to add in R. 
+# All experiments EXCEPT Experiment 2 had 432 trials per subject and I'm pretty sure no trials were lost from these files.
+# Exp 2 had 864 trials per subject.
+
+## exp1: 3 blocks * 144 trials
+## exp2: 6 blocks * 144 trials
+
+
+## setup ----
+
+
+library(here)
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+library(tidyr)
+library(magrittr)
+library(data.table)
+library(nlme)
+library(lme4)
+library(mikeutils)
+
+## settings
+
+theme_set(theme_bw(base_size = 12))
+
+## functions
+
+
+icw <- function(x) {
+  l <- exp(min(x) - x) / 2
+  l / sum(l)
+}
+
+
+
+## load
+
+fnames <- here("data", c("E1_lf.csv", "E2_lf.csv", "E3b_lf.csv", "E3c_lf.csv", "E4b_lf.csv"))
+d <- setNames(lapply(fnames, fread), c("E1", "E2", "E3b", "E3c", "E4b"))
+# lapply(d, head)
+d <- bind_rows(d, .id = "experiment")
+d$tt <- ifelse(d$tt == 1, "congr", "incon")
+str(d)
+table(d$id, d$experiment)
+d$id <- paste0(d$experiment, d$id)
+
+d %<>%
+  
+  group_by(experiment, id) %>%
+  mutate(
+    trial.exp = 1:n(),
+    block = ceiling(trial.exp / 144)
+    ) %>%
+  group_by(experiment, id, block) %>%
+  mutate(trial.block = 1:n())
+
+
+table(d$experiment, d$block)
+table(d$trial.exp, d$experiment)
+table(d$trial.block, d$experiment)
+
+table(d$stim, d$experiment)
+
+table(d$stim, d$ispc)
+
+d$pic <- colsplit(d$stim, "_", c("pic", "discard"))$pic
+d$pic <- gsub(".png", "", d$pic)
+d$pic <- gsub("[0-9]", "", d$pic)
+d$pic
+d$category <- substr(d$pic, 1, 1)
+
+table(d$category, d$ispc, d$tt)
+
+d %<>%
+  
+  group_by(id, category, ispc, tt) %>%
+  mutate(trial.exp.category = 1:n()) %>%
+  group_by(id, category, ispc, tt, block) %>%
+  mutate(trial.block.category = 1:n())
+
+table(d$trial.exp.category, paste(d$ispc, d$tt))
+
+## look ----
+
+## quick trim
+
+
+d$bias2lev <- ifelse(d$bias == "Biased", "Biased", "Unbiased")
+
+d.rt <- d[d$rt < 3000 & d$rt > 200 & d$acc == 1, ]
+
+table(d.rt$tt, d.rt$ispc, d.rt$bias, d.rt$experiment)
+
+fit1 <- lmer(rt ~ tt * ispc * bias2lev * experiment + (1 | id) + (1 | category), d.rt)
+summary(fit1)
+plot(fit1)
+
+
+# plot(d$trial.exp, d$rt)
+
+
+d %>%
+  
+  ggplot(aes(trial.exp, rt, color = tt, fill = tt)) +
+  # geom_point(alpha = 0.1, size = 0.2) +
+  geom_smooth() +
+  
+  scale_fill_brewer(type = "qual", palette = 3) +
+  scale_x_continuous(breaks = seq(0, 144 * 6, 144)) +
+  
+  facet_grid(vars(experiment), vars(block), scales = "free")
+
+d %>%
+  
+  ggplot(aes(trial.exp, rt, color = tt, fill = tt)) +
+  geom_smooth() +
+  
+  scale_fill_brewer(type = "qual", palette = 3) +
+  scale_x_continuous(breaks = seq(0, 144 * 6, 144)) +
+  
+  facet_grid(vars(experiment), vars(block), scales = "free")
+
+
+
+d.rt %>%
+  
+  ggplot(aes(trial.exp, rt, color = tt, fill = tt)) +
+  geom_point(alpha = 0.1, size = 0.2) +
+  geom_smooth() +
+  
+  scale_fill_brewer(type = "qual", palette = 3) +
+  scale_x_continuous(breaks = seq(0, 144 * 6, 144)) +
+  
+  facet_grid(vars(experiment), vars(block), scales = "free")
+
+d.rt %>%
+  
+  ggplot(aes(trial.exp, rt, color = tt, fill = tt)) +
+  geom_smooth() +
+  
+  scale_fill_brewer(type = "qual", palette = 3) +
+  scale_x_continuous(breaks = seq(0, 144 * 6, 144)) +
+  
+  facet_grid(vars(experiment), scales = "free")
+
+
+## prewhitening ----
+
+d.rt$block <- as.factor(d.rt$block)
+d.rt$trial.block.z <- scale(d.rt$trial.block)
+polys <- setNames(as.data.frame(poly(d.rt$trial.block.z, 6)), paste0("trial.block.z", 1:6))
+d.rt <- bind_cols(d.rt, polys)
+
+
+fit.ps1.empty <- lmer(
+  
+  rt ~ 
+    -1 +
+    block +
+    block : trial.block.z1 + 
+    (1 | id),
+  
+  d.rt %>% filter(block %in% 1:3),
+  
+  control = lmerControl(optCtrl = list(maxfun = 1e10))
+  
+)
+
+
+fit.ps0 <- lmer(
+  
+  rt ~ 
+    -1 +
+    block +
+    trial.block.z1 + 
+    
+    (
+      -1 +
+        block +
+        trial.block.z1
+      | id
+    ),
+  
+  d.rt %>% filter(block %in% 1:3),
+  
+  control = lmerControl(optCtrl = list(maxfun = 1e10))
+  
+)
+
+
+fit.ps1 <- lmer(
+  
+  rt ~ 
+    -1 +
+    block +
+    block : trial.block.z1 + 
+    
+    (
+      -1 +
+        block +
+        block : trial.block.z1
+      | id
+    ),
+  
+  
+  d.rt %>% filter(block %in% 1:3),
+  
+  control = lmerControl(optCtrl = list(maxfun = 1e10))
+)
+
+fit.ps2 <- lmer(
+  
+  rt ~ 
+    -1 +
+    block +
+    block : trial.block.z1 + 
+    block : trial.block.z2 + 
+    
+    (
+      -1 +
+        block +
+        block : trial.block.z1 +
+        block : trial.block.z2 
+      | id
+    ),
+  
+  d.rt %>% filter(block %in% 1:3),
+  
+  control = lmerControl(optCtrl = list(maxfun = 1e10))
+  
+)
+
+
+fit.ps3 <- lmer(
+  
+  rt ~ 
+    -1 +
+    block +
+    block : trial.block.z1 + 
+    block : trial.block.z2 + 
+    block : trial.block.z3 + 
+    
+    (
+      -1 +
+        block +
+        block : trial.block.z1 +
+        block : trial.block.z2 + 
+        block : trial.block.z3
+        | id
+    ),
+  
+  d.rt %>% filter(block %in% 1:3),
+  
+  control = lmerControl(optCtrl = list(maxfun = 1e10))
+  
+)
+
+
+
+bics.ps3 <- BIC(
+  fit.ps0,
+  fit.ps1,
+  fit.ps2,
+  fit.ps3
+)
+
+bics.ps3$w  <- icw(bics.ps3$BIC)
+
+plot(bics.ps3$df, bics.ps3$w)
+
+
+
+# fit.ps6.empty <- lmer(
+#   
+#   rt ~ 
+#     -1 +
+#     block +
+#     block : trial.block.z1 + 
+#     block : trial.block.z2 + 
+#     block : trial.block.z3 +
+#     block : trial.block.z4 +
+#     block : trial.block.z5 +
+#     block : trial.block.z6 +
+#     (1 | id),
+#   
+#   d.rt %>% filter(block %in% 1:3)
+#   
+# )
+# 
+# fit.ps6 <- lmer(
+#   
+#   rt ~ 
+#     -1 +
+#     block +
+#     block : trial.block.z1 + 
+#     block : trial.block.z2 + 
+#     block : trial.block.z3 +
+#     block : trial.block.z4 +
+#     block : trial.block.z5 +
+#     block : trial.block.z6 +
+#     
+#   (
+#     -1 +
+#       block +
+#       block : trial.block.z1 + 
+#       block : trial.block.z2 + 
+#       block : trial.block.z3 +
+#       block : trial.block.z4 +
+#       block : trial.block.z5 +
+#       block : trial.block.z6
+#     | id
+#   ),
+#   
+#   d.rt %>% filter(block %in% 1:3)
+#   
+# )
+# 
+# fit.ps1.empty <- update(
+#   fit.ps6.empty, 
+#   . ~ . -
+#     block : trial.block.z2 + 
+#     block : trial.block.z3 +
+#     block : trial.block.z4 +
+#     block : trial.block.z5 +
+#     block : trial.block.z6
+#   )
+# 
+# fit.ps1 <- update(
+#   fit.ps6, 
+#   . ~ . -
+#     block : trial.block.z2 + 
+#     block : trial.block.z3 +
+#     block : trial.block.z4 +
+#     block : trial.block.z5 +
+#     block : trial.block.z6
+# )
+# 
+# 
+# 
+# 
+# 
+# fit.ps6.empty <- update(fit.ps7.empty, . ~ . - block:trial.block.z7)
+# fit.ps5.empty <- update(fit.ps6.empty, . ~ . - block:trial.block.z6)
+# fit.ps4.empty <- update(fit.ps5.empty, . ~ . - block:trial.block.z5)
+# fit.ps3.empty <- update(fit.ps4.empty, . ~ . - block:trial.block.z4)
+# fit.ps2.empty <- update(fit.ps3.empty, . ~ . - block:trial.block.z3)
+# fit.ps1.empty <- update(fit.ps2.empty, . ~ . - block:trial.block.z2)
+# fit.ps0.empty <- update(fit.ps1.empty, . ~ . - block:trial.block.z1 + trial.block.z1)
+# 
+# bics.ps10.empty <- anova(
+#   fit.empty,
+#   fit.ps0.empty,
+#   fit.ps1.empty,
+#   fit.ps2.empty,
+#   fit.ps3.empty,
+#   fit.ps4.empty,
+#   fit.ps5.empty,
+#   fit.ps6.empty,
+#   fit.ps7.empty,
+#   fit.ps8.empty,
+#   fit.ps9.empty,
+#   fit.ps10.empty
+# )
+# 
+# bics.ps10.empty$w  <- icw(bics.ps10.empty$BIC)
+# 
+# plot(bics.ps10.empty$df, bics.ps10.empty$w)
+# 
